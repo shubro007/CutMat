@@ -269,6 +269,26 @@ input[type="file"]{ display:none; }
 .multi-list-item button{ background:none;border:none;color:var(--danger);cursor:pointer;font-size:13px; padding:2px 4px;}
 .empty-note{ color:var(--text-faint); font-size:11.5px; font-family:var(--mono); padding:10px 0; }
 
+/* size-fit controls */
+.sizefit-row{ display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+.sizefit-row label.toggle-label{
+  display:flex; align-items:center; gap:7px; font-size:11.5px; color:var(--text-dim); font-family:var(--sans); font-weight:600; cursor:pointer;
+}
+.sizefit-row input[type="checkbox"]{ accent-color: var(--accent); width:14px; height:14px; cursor:pointer; }
+.sizefit-fields{ display:none; }
+.sizefit-fields.active{ display:flex; }
+.unit-select{
+  background:var(--panel); border:1px solid var(--border); color:var(--text);
+  font-family:var(--mono); font-size:12px; padding:7px 6px; border-radius:4px;
+}
+.size-status{ font-size:11px; font-family:var(--mono); color:var(--text-faint); margin-top:8px; line-height:1.6; min-height:14px; }
+.size-status.err{ color:var(--danger); }
+.size-status.ok{ color:var(--accent-2); }
+.badge-size{
+  display:inline-block; font-family:var(--mono); font-size:9.5px; color:var(--bg);
+  background:var(--accent-2); padding:1px 5px; border-radius:2px; margin-left:6px; font-weight:700;
+}
+
 /* output panel */
 .output-panel{ padding:18px; flex:1; }
 .output-empty{ color:var(--text-faint); font-size:12px; line-height:1.7; }
@@ -281,6 +301,7 @@ input[type="file"]{ display:none; }
 .thumb-card canvas{ max-width:100%; max-height:100%; display:block; }
 .thumb-meta{ padding:6px 7px; }
 .thumb-meta .name{ font-family:var(--mono); font-size:10px; color:var(--text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block; }
+.thumb-meta .filesize{ font-family:var(--mono); font-size:9.5px; color:var(--text-faint); display:block; margin-top:2px; }
 .thumb-meta .dl{
   width:100%; margin-top:5px; background:var(--panel-2); border:1px solid var(--border); color:var(--text);
   font-size:10.5px; padding:5px; border-radius:3px; cursor:pointer; font-family:var(--sans); font-weight:600;
@@ -473,6 +494,29 @@ input[type="file"]{ display:none; }
         <div class="field-row">
           <div class="field" style="flex:2;"><label>File prefix</label><input type="text" id="namePrefix" value="image"></div>
         </div>
+
+        <div class="sizefit-row">
+          <label class="toggle-label" for="sizefitToggle">
+            <input type="checkbox" id="sizefitToggle">
+            Target file size
+          </label>
+        </div>
+        <div class="field-row sizefit-fields" id="sizefitFields">
+          <div class="field" style="flex:1.4;">
+            <label>Target size</label>
+            <input type="number" id="sizefitValue" min="1" step="1" value="200">
+          </div>
+          <div class="field" style="flex:1;">
+            <label>Unit</label>
+            <select class="unit-select" id="sizefitUnit" style="width:100%;">
+              <option value="1024">KB</option>
+              <option value="1048576">MB</option>
+            </select>
+          </div>
+        </div>
+        <p class="hint-text" id="sizefitHint" style="display:none;">Exports as JPEG and adjusts quality (and, if needed, resolution) to get as close as possible to your target. Exact byte counts aren't guaranteed.</p>
+        <div class="size-status" id="sizeStatus"></div>
+
         <div class="stack-btns" id="exportButtons">
           <button class="btn btn-primary btn-sm" id="btnGenerate" style="width:100%;">Generate preview</button>
         </div>
@@ -567,7 +611,7 @@ input[type="file"]{ display:none; }
       </details>
       <details class="faq-item">
         <summary>What file types are supported?</summary>
-        <p>Any image format your browser can decode, which typically includes JPG, PNG, and WEBP. Exports are always PNG.</p>
+        <p>Any image format your browser can decode, which typically includes JPG, PNG, and WEBP. Exports are always PNG, unless you turn on a target file size, in which case exports switch to JPEG so the size can be controlled.</p>
       </details>
       <details class="faq-item">
         <summary>Is there a size or resolution limit?</summary>
@@ -576,6 +620,10 @@ input[type="file"]{ display:none; }
       <details class="faq-item">
         <summary>Can I get uneven rows or columns in Grid Slicing mode?</summary>
         <p>Yes. Start from an even grid, then drag any individual dividing line to resize that row or column. Each line moves independently.</p>
+      </details>
+      <details class="faq-item">
+        <summary>Can I control the exported file size in KB or MB?</summary>
+        <p>Yes. Turn on "Target file size" in the Export panel, enter a value like 40 KB or 200 KB, and generate a preview. Cutmat searches for a JPEG quality level that lands close to your target, and will also shrink the image's resolution if quality adjustment alone can't hit a very small target.</p>
       </details>
       <details class="faq-item">
         <summary>Does this work offline?</summary>
@@ -600,7 +648,8 @@ input[type="file"]{ display:none; }
     crop: { x:0, y:0, w:1, h:1 },
     grid: { vFracs: [0.5], hFracs: [0.5] },
     multi: { items: [], nextId: 1 },
-    output: { items: [] } // [{name, canvas}]
+    output: { items: [] }, // [{name, canvas, blob, sizeBytes, sizeLabel}]
+    sizefit: { enabled:false, targetBytes: 200*1024, busy:false }
   };
 
   // ---------------- dom refs ----------------
@@ -631,6 +680,13 @@ input[type="file"]{ display:none; }
   const gridRowsEl = document.getElementById('gridRows');
   const gridColsEl = document.getElementById('gridCols');
   const multiListEl = document.getElementById('multiList');
+
+  const sizefitToggle = document.getElementById('sizefitToggle');
+  const sizefitFields = document.getElementById('sizefitFields');
+  const sizefitHint = document.getElementById('sizefitHint');
+  const sizefitValueEl = document.getElementById('sizefitValue');
+  const sizefitUnitEl = document.getElementById('sizefitUnit');
+  const sizeStatusEl = document.getElementById('sizeStatus');
 
   // ---------------- helpers ----------------
   function clamp(v, lo, hi){ return Math.min(hi, Math.max(lo, v)); }
@@ -691,9 +747,10 @@ input[type="file"]{ display:none; }
     }
   }
 
-  function cropCanvasFromRect(rect){
-    const w = Math.max(1, round(rect.w));
-    const h = Math.max(1, round(rect.h));
+  function cropCanvasFromRect(rect, scale){
+    scale = scale || 1;
+    const w = Math.max(1, round(rect.w*scale));
+    const h = Math.max(1, round(rect.h*scale));
     const c = document.createElement('canvas');
     c.width = w; c.height = h;
     const ctx = c.getContext('2d');
@@ -701,8 +758,8 @@ input[type="file"]{ display:none; }
     return c;
   }
 
-  function canvasToBlob(canvas){
-    return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+  function canvasToBlob(canvas, type, quality){
+    return new Promise((resolve) => canvas.toBlob(resolve, type, quality));
   }
 
   function triggerDownload(blob, filename){
@@ -718,6 +775,137 @@ input[type="file"]{ display:none; }
   function prefix(){
     const v = namePrefixInput.value.trim();
     return v ? v.replace(/[^a-z0-9_\-]+/gi, '_') : 'image';
+  }
+
+  function formatBytes(n){
+    if(n >= 1024*1024) return (n/(1024*1024)).toFixed(2)+' MB';
+    return Math.round(n/1024*10)/10+' KB';
+  }
+
+  // ---------------- size-fit (target file size) ----------------
+  // Given a source rect (in natural-image px), produce a blob that's as close as
+  // possible to targetBytes by binary-searching JPEG quality, and downscaling
+  // resolution as a fallback if even lowest quality is still too big.
+  async function fitRectToSize(rect, targetBytes){
+    const minQuality = 0.05;
+    const minScale = 0.1;
+    let scale = 1;
+    let best = null; // {blob, canvas, quality, scale}
+
+    for(let attempt=0; attempt<6; attempt++){
+      const canvas = cropCanvasFromRect(rect, scale);
+
+      // binary search quality for this canvas scale
+      let lo = minQuality, hi = 0.97;
+      let localBest = null;
+      for(let iter=0; iter<7; iter++){
+        const mid = (lo+hi)/2;
+        const blob = await canvasToBlob(canvas, 'image/jpeg', mid);
+        if(!blob) break;
+        if(!localBest || Math.abs(blob.size-targetBytes) < Math.abs(localBest.blob.size-targetBytes)){
+          localBest = { blob, quality: mid };
+        }
+        if(blob.size > targetBytes){
+          hi = mid;
+        } else {
+          lo = mid;
+        }
+      }
+      // also try the floor quality explicitly, in case target is very small
+      const floorBlob = await canvasToBlob(canvas, 'image/jpeg', minQuality);
+      if(floorBlob && (!localBest || Math.abs(floorBlob.size-targetBytes) < Math.abs(localBest.blob.size-targetBytes))){
+        localBest = { blob: floorBlob, quality: minQuality };
+      }
+
+      if(localBest){
+        if(!best || Math.abs(localBest.blob.size-targetBytes) < Math.abs(best.blob.size-targetBytes)){
+          best = { blob: localBest.blob, canvas, quality: localBest.quality, scale };
+        }
+        // if even the floor-quality blob at this scale fits under target, good enough
+        if(localBest.blob.size <= targetBytes) break;
+      }
+
+      // still too big at lowest quality -> shrink resolution and retry
+      if(scale <= minScale) break;
+      scale = Math.max(minScale, scale*0.7);
+    }
+
+    return best;
+  }
+
+  function sizefitSettings(){
+    const raw = parseFloat(sizefitValueEl.value) || 0;
+    const unit = parseFloat(sizefitUnitEl.value) || 1024;
+    return { enabled: sizefitToggle.checked, targetBytes: Math.max(1024, round(raw*unit)) };
+  }
+
+  function setSizeStatus(text, cls){
+    sizeStatusEl.textContent = text || '';
+    sizeStatusEl.className = 'size-status' + (cls ? ' '+cls : '');
+  }
+
+  sizefitToggle.addEventListener('change', () => {
+    const on = sizefitToggle.checked;
+    sizefitFields.classList.toggle('active', on);
+    sizefitHint.style.display = on ? '' : 'none';
+    setSizeStatus('');
+    regenerateCurrentMode();
+  });
+  sizefitValueEl.addEventListener('change', regenerateCurrentMode);
+  sizefitUnitEl.addEventListener('change', regenerateCurrentMode);
+
+  function regenerateCurrentMode(){
+    if(!state.img) return;
+    if(state.mode === 'crop') generateCropPreview();
+    else if(state.mode === 'grid') generateGridPreview();
+    else generateMultiPreview();
+  }
+
+  // Builds output items (with blobs) for a list of {name, rect} using either
+  // plain PNG export or size-fitted JPEG export depending on sizefit state.
+  async function buildOutputItems(specs){
+    const { enabled, targetBytes } = sizefitSettings();
+    const items = [];
+
+    if(!enabled){
+      for(const spec of specs){
+        const canvas = cropCanvasFromRect(spec.rect);
+        const blob = await canvasToBlob(canvas, 'image/png');
+        items.push({ name: spec.name, canvas, blob, sizeBytes: blob ? blob.size : 0 });
+      }
+      setSizeStatus('');
+      return items;
+    }
+
+    state.sizefit.busy = true;
+    setSizeStatus('Fitting ' + specs.length + (specs.length===1?' image':' images') + ' to ~' + formatBytes(targetBytes) + '…');
+    let anyMissed = false;
+    for(const spec of specs){
+      const result = await fitRectToSize(spec.rect, targetBytes);
+      if(result){
+        const jpgName = spec.name.replace(/\.png$/i, '.jpg');
+        items.push({
+          name: jpgName,
+          canvas: result.canvas,
+          blob: result.blob,
+          sizeBytes: result.blob.size,
+          scale: result.scale,
+          quality: result.quality
+        });
+        if(result.blob.size > targetBytes*1.15) anyMissed = true;
+      }
+    }
+    state.sizefit.busy = false;
+
+    if(items.length){
+      const avg = items.reduce((s,i)=>s+i.sizeBytes,0)/items.length;
+      let msg = 'Fitted to ~' + formatBytes(avg) + ' on average (target ' + formatBytes(targetBytes) + ').';
+      if(anyMissed) msg += ' Some images stayed above target even at lowest quality/resolution.';
+      setSizeStatus(msg, anyMissed ? 'err' : 'ok');
+    } else {
+      setSizeStatus('Could not fit to target size.', 'err');
+    }
+    return items;
   }
 
   // ---------------- generic interactive rectangle ----------------
@@ -875,10 +1063,14 @@ input[type="file"]{ display:none; }
     generateCropPreview();
   });
 
-  function generateCropPreview(){
+  let cropGen = 0;
+  async function generateCropPreview(){
     if(!state.img) return;
-    const canvas = cropCanvasFromRect(state.crop);
-    state.output.items = [{ name: prefix() + '.png', canvas }];
+    const gen = ++cropGen;
+    const specs = [{ name: prefix() + '.png', rect: { x: state.crop.x, y: state.crop.y, w: state.crop.w, h: state.crop.h } }];
+    const items = await buildOutputItems(specs);
+    if(gen !== cropGen) return; // a newer request superseded this one
+    state.output.items = items;
     renderOutputThumbs();
   }
 
@@ -1014,21 +1206,24 @@ input[type="file"]{ display:none; }
   }
   function updateCellChips(){ buildCellChips(); }
 
-  function generateGridPreview(){
+  let gridGen = 0;
+  async function generateGridPreview(){
     if(!state.img) return;
+    const gen = ++gridGen;
     const { xs, ys } = gridBoundsPx();
     const total = (xs.length-1)*(ys.length-1);
     const width = String(total).length;
-    const items = [];
+    const specs = [];
     let n = 1;
     for(let r=0;r<ys.length-1;r++){
       for(let c=0;c<xs.length-1;c++){
         const rect = { x: xs[c], y: ys[r], w: xs[c+1]-xs[c], h: ys[r+1]-ys[r] };
-        const canvas = cropCanvasFromRect(rect);
-        items.push({ name: `${prefix()}_${pad(n, Math.max(2,width))}.png`, canvas });
+        specs.push({ name: `${prefix()}_${pad(n, Math.max(2,width))}.png`, rect });
         n++;
       }
     }
+    const items = await buildOutputItems(specs);
+    if(gen !== gridGen) return;
     state.output.items = items;
     renderOutputThumbs();
   }
@@ -1127,14 +1322,18 @@ input[type="file"]{ display:none; }
     document.addEventListener('mouseup', up);
   });
 
-  function generateMultiPreview(){
+  let multiGen = 0;
+  async function generateMultiPreview(){
     if(!state.img) return;
+    const gen = ++multiGen;
     const total = state.multi.items.length;
     const width = String(Math.max(total,1)).length;
-    const items = state.multi.items.map((item, idx) => ({
+    const specs = state.multi.items.map((item, idx) => ({
       name: `${prefix()}_${pad(idx+1, Math.max(2,width))}.png`,
-      canvas: cropCanvasFromRect(item)
+      rect: { x: item.x, y: item.y, w: item.w, h: item.h }
     }));
+    const items = await buildOutputItems(specs);
+    if(gen !== multiGen) return;
     state.output.items = items;
     renderOutputThumbs();
   }
@@ -1164,11 +1363,15 @@ input[type="file"]{ display:none; }
       name.className = 'name';
       name.textContent = item.name;
       meta.appendChild(name);
+      const sizeEl = document.createElement('span');
+      sizeEl.className = 'filesize';
+      sizeEl.textContent = item.sizeBytes ? formatBytes(item.sizeBytes) : '';
+      meta.appendChild(sizeEl);
       const dl = document.createElement('button');
       dl.className = 'dl';
-      dl.textContent = 'Download PNG';
+      dl.textContent = 'Download';
       dl.addEventListener('click', async () => {
-        const blob = await canvasToBlob(item.canvas);
+        const blob = item.blob || await canvasToBlob(item.canvas, 'image/png');
         triggerDownload(blob, item.name);
       });
       meta.appendChild(dl);
@@ -1199,7 +1402,7 @@ input[type="file"]{ display:none; }
   async function downloadZip(items){
     const zip = new JSZip();
     for(const item of items){
-      const blob = await canvasToBlob(item.canvas);
+      const blob = item.blob || await canvasToBlob(item.canvas, 'image/png');
       zip.file(item.name, blob);
     }
     const blob = await zip.generateAsync({ type: 'blob' });
@@ -1228,16 +1431,12 @@ input[type="file"]{ display:none; }
   });
 
   btnGenerate.addEventListener('click', () => {
-    if(state.mode === 'crop') generateCropPreview();
-    else if(state.mode === 'grid') generateGridPreview();
-    else generateMultiPreview();
+    regenerateCurrentMode();
   });
 
   namePrefixInput.addEventListener('input', () => {
     if(!state.img) return;
-    if(state.mode === 'crop') generateCropPreview();
-    else if(state.mode === 'grid') generateGridPreview();
-    else generateMultiPreview();
+    regenerateCurrentMode();
   });
 
   // ---------------- upload wiring ----------------
