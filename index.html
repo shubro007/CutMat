@@ -8,18 +8,14 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
 <!--
-  ADSENSE SETUP (do this once you're approved):
-  1) Replace ca-pub-XXXXXXXXXXXXXXXX below with your publisher ID, then
-     uncomment this script tag.
-  2) Publish an /ads.txt file at your site root containing the line
-     Google gives you in the AdSense dashboard, e.g.:
-     google.com, pub-XXXXXXXXXXXXXXXX, DIRECT, f08c47fec0942fa0
-  3) In each <div class="ad-slot">...</div> below, replace the placeholder
-     content with your real <ins class="adsbygoogle">...</ins> unit and
-     the matching data-ad-slot ID from the AdSense dashboard.
-
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script>
+  ADSENSE STATUS: publisher ID is live (ca-pub-9046554438075723).
+  Still to do: create ad units in the AdSense dashboard (Ads > By ad unit),
+  then replace each REPLACE_WITH_SLOT_ID below with the real data-ad-slot
+  number Google gives you for that unit. Also publish /ads.txt at your
+  site root with the line from your AdSense dashboard, e.g.:
+  google.com, pub-9046554438075723, DIRECT, f08c47fec0942fa0
 -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9046554438075723" crossorigin="anonymous"></script>
 
 <style>
 :root{
@@ -300,16 +296,20 @@ input[type="file"]{ display:none; }
 
 /* ---------- ad slots ---------- */
 .ad-slot{
-  border:1px dashed var(--border);
+  width:100%;
+  border:1px dashed var(--border-soft);
   border-radius:5px;
   background:var(--panel);
-  display:flex; align-items:center; justify-content:center;
-  color:var(--text-faint); font-family:var(--mono); font-size:10px; letter-spacing:.5px; text-transform:uppercase;
+  padding:8px;
 }
-.ad-slot::before{ content: attr(data-label); }
-.ad-top{ width:100%; min-height:60px; }
-.ad-sidebar{ width:100%; min-height:250px; }
-.ad-incontent{ width:100%; min-height:100px; margin:36px 0; }
+.ad-label{
+  display:block; text-align:center;
+  color:var(--text-faint); font-family:var(--mono); font-size:9.5px; letter-spacing:.5px; text-transform:uppercase;
+  margin-bottom:6px;
+}
+.ad-top{ min-height:60px; }
+.ad-sidebar{ min-height:250px; }
+.ad-incontent{ min-height:100px; margin:36px 0; }
 
 /* ---------- surrounding content page ---------- */
 .content-page{
@@ -387,8 +387,16 @@ input[type="file"]{ display:none; }
     </div>
   </div>
 
-  <!-- AdSense: replace this placeholder with your <ins class="adsbygoogle"> unit -->
-  <div class="ad-slot ad-top" data-label="Advertisement"></div>
+  <div class="ad-slot ad-top">
+    <span class="ad-label">Advertisement</span>
+    <ins class="adsbygoogle"
+         style="display:block"
+         data-ad-client="ca-pub-9046554438075723"
+         data-ad-slot="REPLACE_WITH_SLOT_ID"
+         data-ad-format="auto"
+         data-full-width-responsive="true"></ins>
+    <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+  </div>
 
   <div class="workspace">
     <div class="stage-col" id="stageCol">
@@ -478,8 +486,16 @@ input[type="file"]{ display:none; }
       </div>
 
       <div class="side-section">
-        <!-- AdSense: replace this placeholder with your <ins class="adsbygoogle"> unit -->
-        <div class="ad-slot ad-sidebar" data-label="Advertisement"></div>
+              <div class="ad-slot ad-sidebar">
+          <span class="ad-label">Advertisement</span>
+          <ins class="adsbygoogle"
+               style="display:block"
+               data-ad-client="ca-pub-9046554438075723"
+               data-ad-slot="REPLACE_WITH_SLOT_ID"
+               data-ad-format="auto"
+               data-full-width-responsive="true"></ins>
+          <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+        </div>
       </div>
 
       <div class="footer-note">All processing happens locally in your browser.<br>Nothing is uploaded anywhere.</div>
@@ -530,8 +546,16 @@ input[type="file"]{ display:none; }
       </div>
     </section>
 
-    <!-- AdSense: replace this placeholder with your <ins class="adsbygoogle"> unit -->
-    <div class="ad-slot ad-incontent" data-label="Advertisement"></div>
+      <div class="ad-slot ad-incontent">
+      <span class="ad-label">Advertisement</span>
+      <ins class="adsbygoogle"
+           style="display:block"
+           data-ad-client="ca-pub-9046554438075723"
+           data-ad-slot="REPLACE_WITH_SLOT_ID"
+           data-ad-format="auto"
+           data-full-width-responsive="true"></ins>
+      <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+    </div>
 
     <section class="content-section">
       <p class="eyebrow">FAQ</p>
