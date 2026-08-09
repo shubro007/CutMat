@@ -1,0 +1,1251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cutmat — Image Cropping &amp; Slicing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!--
+  ADSENSE SETUP (do this once you're approved):
+  1) Replace ca-pub-XXXXXXXXXXXXXXXX below with your publisher ID, then
+     uncomment this script tag.
+  2) Publish an /ads.txt file at your site root containing the line
+     Google gives you in the AdSense dashboard, e.g.:
+     google.com, pub-XXXXXXXXXXXXXXXX, DIRECT, f08c47fec0942fa0
+  3) In each <div class="ad-slot">...</div> below, replace the placeholder
+     content with your real <ins class="adsbygoogle">...</ins> unit and
+     the matching data-ad-slot ID from the AdSense dashboard.
+
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script>
+-->
+
+<style>
+:root{
+  --bg: #131e1a;
+  --bg-2: #16241f;
+  --panel: #1c2b25;
+  --panel-2: #22342c;
+  --border: #35493f;
+  --border-soft: #2a3b33;
+  --text: #eee9de;
+  --text-dim: #9db3a7;
+  --text-faint: #6d8378;
+  --accent: #f2a541;
+  --accent-dim: #7a5a26;
+  --accent-2: #7fc8db;
+  --accent-2-dim: #365257;
+  --danger: #ef6f5c;
+  --danger-dim: #6e3a32;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+  --display: 'Space Grotesk', sans-serif;
+  --sans: 'Inter', system-ui, sans-serif;
+  --radius: 3px;
+}
+*{box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  margin:0;
+  background:
+    radial-gradient(1200px 600px at 20% -10%, #1a2b23 0%, transparent 60%),
+    var(--bg);
+  color:var(--text);
+  font-family:var(--sans);
+  font-size:14px;
+  -webkit-font-smoothing:antialiased;
+}
+::selection{ background:var(--accent-dim); color:var(--text); }
+
+/* ---------- layout shell ---------- */
+.app{ display:flex; flex-direction:column; min-height:100vh; }
+
+.topbar{
+  display:flex; align-items:center; gap:16px;
+  padding:14px 22px;
+  border-bottom:1px solid var(--border-soft);
+  background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);
+  flex-wrap:wrap;
+}
+.brand{ display:flex; align-items:center; gap:10px; margin-right:8px; }
+.brand-mark{
+  width:26px;height:26px; flex:none; border-radius:2px;
+  background:
+    linear-gradient(var(--accent),var(--accent)) 0 0/2px 9px no-repeat,
+    linear-gradient(var(--accent),var(--accent)) 0 0/9px 2px no-repeat,
+    linear-gradient(var(--accent-2),var(--accent-2)) 100% 100%/2px 9px no-repeat,
+    linear-gradient(var(--accent-2),var(--accent-2)) 100% 100%/9px 2px no-repeat;
+  background-color:transparent;
+  border:1px solid var(--border);
+}
+.brand h1{
+  font-family:var(--display); font-size:17px; font-weight:700; margin:0;
+  letter-spacing:0.2px;
+}
+.brand span{ color:var(--text-faint); font-size:11px; font-family:var(--mono); display:block; margin-top:1px;}
+
+.mode-tabs{ display:flex; gap:4px; background:var(--panel); border:1px solid var(--border-soft); border-radius:6px; padding:3px; }
+.mode-tab{
+  appearance:none; border:0; background:transparent; color:var(--text-dim);
+  font-family:var(--sans); font-weight:600; font-size:12.5px;
+  padding:8px 14px; border-radius:4px; cursor:pointer; display:flex; align-items:center; gap:7px;
+  transition:background .15s,color .15s;
+  white-space:nowrap;
+}
+.mode-tab .num{ font-family:var(--mono); font-size:10px; opacity:.7; }
+.mode-tab:hover{ color:var(--text); }
+.mode-tab.active{ background:var(--panel-2); color:var(--text); box-shadow:inset 0 0 0 1px var(--border); }
+.mode-tab.active.m-crop{ color:var(--accent); }
+.mode-tab.active.m-grid{ color:var(--accent-2); }
+.mode-tab.active.m-multi{ color:#e39ad1; }
+
+.topbar-actions{ margin-left:auto; display:flex; gap:8px; align-items:center; }
+
+.btn{
+  appearance:none; cursor:pointer; font-family:var(--sans); font-weight:600; font-size:12.5px;
+  border-radius:5px; padding:8px 13px; border:1px solid var(--border);
+  background:var(--panel-2); color:var(--text); display:inline-flex; align-items:center; gap:7px;
+  transition:filter .15s, transform .05s, background .15s;
+}
+.btn:hover{ filter:brightness(1.15); }
+.btn:active{ transform:translateY(1px); }
+.btn:disabled{ opacity:.4; cursor:not-allowed; filter:none; }
+.btn-primary{ background:var(--accent); border-color:var(--accent); color:#241804; }
+.btn-primary:hover{ filter:brightness(1.08); }
+.btn-ghost{ background:transparent; }
+.btn-danger{ background:transparent; border-color:var(--danger-dim); color:var(--danger); }
+.btn-danger:hover{ background:rgba(239,111,92,.1); }
+.btn-sm{ padding:5px 9px; font-size:11.5px; border-radius:4px; }
+.btn-icon{ padding:6px 8px; }
+
+input[type="file"]{ display:none; }
+
+/* ---------- main split ---------- */
+.workspace{ flex:1; display:flex; min-height:0; }
+.stage-col{ flex:1; display:flex; flex-direction:column; align-items:center; padding:28px 26px; overflow:auto; min-width:0; }
+.sidebar{
+  width:320px; flex:none; border-left:1px solid var(--border-soft);
+  background:var(--bg-2); display:flex; flex-direction:column; overflow-y:auto;
+}
+
+/* ---------- empty state ---------- */
+.empty{
+  width:100%; max-width:640px; margin:auto; text-align:center;
+  border:1.5px dashed var(--border); border-radius:10px; padding:64px 32px;
+  position:relative; transition:border-color .15s, background .15s;
+}
+.empty.drag-over{ border-color:var(--accent); background:rgba(242,165,65,0.05); }
+.empty .corner{ position:absolute; width:16px; height:16px; }
+.empty .corner::before,.empty .corner::after{ content:""; position:absolute; background:var(--accent); }
+.empty .c-tl{ top:10px; left:10px; } .empty .c-tr{ top:10px; right:10px; }
+.empty .c-bl{ bottom:10px; left:10px; } .empty .c-br{ bottom:10px; right:10px; }
+.empty .c-tl::before,.empty .c-tr::before,.empty .c-bl::before,.empty .c-br::before{ width:2px; height:14px; }
+.empty .c-tl::after,.empty .c-tr::after,.empty .c-bl::after,.empty .c-br::after{ width:14px; height:2px; }
+.empty .c-tl::before,.empty .c-tl::after{ top:0; left:0; }
+.empty .c-tr::before{ top:0; right:0; } .empty .c-tr::after{ top:0; right:0; }
+.empty .c-bl::before{ bottom:0; left:0; } .empty .c-bl::after{ bottom:0; left:0; }
+.empty .c-br::before{ bottom:0; right:0; } .empty .c-br::after{ bottom:0; right:0; }
+.empty h2{ font-family:var(--display); font-size:20px; margin:0 0 8px; }
+.empty p{ color:var(--text-dim); margin:0 0 22px; line-height:1.6; font-size:13px; }
+.empty .hint{ margin-top:16px; font-family:var(--mono); font-size:11px; color:var(--text-faint); }
+
+/* ---------- stage / ruler ---------- */
+.stage-shell{ display:none; width:100%; max-width:900px; }
+.stage-shell.active{ display:block; }
+.ruler-wrap{ display:grid; grid-template-columns:26px 1fr; grid-template-rows:20px 1fr; width:100%; }
+.ruler-corner{ background:var(--bg-2); }
+.ruler-top, .ruler-left{ position:relative; background:var(--panel); overflow:hidden; }
+.ruler-top{ border-bottom:1px solid var(--border-soft); }
+.ruler-left{ border-right:1px solid var(--border-soft); }
+.tick{ position:absolute; font-family:var(--mono); color:var(--text-faint); font-size:9px; }
+.ruler-top .tick{ top:6px; transform:translateX(-50%); border-left:1px solid var(--border); padding-left:3px; height:14px; }
+.ruler-left .tick{ left:5px; writing-mode:vertical-rl; transform:translateY(-50%) rotate(180deg); border-top:1px solid var(--border); padding-top:3px; }
+
+.stage{
+  position:relative; width:100%; background:#0d1512;
+  background-image:
+    linear-gradient(rgba(127,200,219,0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(127,200,219,0.05) 1px, transparent 1px);
+  background-size:20px 20px;
+  box-shadow:0 0 0 1px var(--border-soft);
+  user-select:none;
+}
+.stage img{ display:block; width:100%; height:100%; pointer-events:none; user-select:none; }
+.overlay{ position:absolute; inset:0; pointer-events:none; }
+
+/* selection rects */
+.rect{ position:absolute; pointer-events:auto; }
+.rect-body{
+  position:absolute; inset:0; cursor:move;
+  border:1.5px solid var(--accent);
+  background:repeating-linear-gradient(45deg, rgba(242,165,65,0.09) 0 6px, rgba(242,165,65,0.02) 6px 12px);
+}
+.rect.multi-rect .rect-body{ border-color:#e39ad1; background:repeating-linear-gradient(45deg, rgba(227,154,209,0.09) 0 6px, rgba(227,154,209,0.02) 6px 12px); }
+.rect-dims{
+  position:absolute; top:100%; left:0; margin-top:4px;
+  font-family:var(--mono); font-size:10px; color:var(--bg); background:var(--accent);
+  padding:2px 5px; border-radius:2px; white-space:nowrap; pointer-events:none;
+}
+.rect.multi-rect .rect-dims{ background:#e39ad1; }
+.rect-label{
+  position:absolute; top:4px; left:4px; font-family:var(--mono); font-size:10px; font-weight:600;
+  color:#241804; background:#e39ad1; width:16px; height:16px; border-radius:2px; display:flex;
+  align-items:center; justify-content:center; pointer-events:none;
+}
+.rect-del{
+  position:absolute; top:-9px; right:-9px; width:18px; height:18px; border-radius:50%;
+  background:var(--danger); color:#2a0f0b; border:1.5px solid var(--bg); font-size:12px; line-height:1;
+  cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; font-weight:700;
+}
+.handle{ position:absolute; width:11px; height:11px; z-index:2; }
+.handle::before{ content:""; position:absolute; inset:0; }
+.h-nw{ top:-6px; left:-6px; cursor:nwse-resize; }
+.h-ne{ top:-6px; right:-6px; cursor:nesw-resize; }
+.h-sw{ bottom:-6px; left:-6px; cursor:nesw-resize; }
+.h-se{ bottom:-6px; right:-6px; cursor:nwse-resize; }
+.h-n{ top:-6px; left:50%; margin-left:-6px; cursor:ns-resize; }
+.h-s{ bottom:-6px; left:50%; margin-left:-6px; cursor:ns-resize; }
+.h-e{ right:-6px; top:50%; margin-top:-6px; cursor:ew-resize; }
+.h-w{ left:-6px; top:50%; margin-top:-6px; cursor:ew-resize; }
+.h-nw::before,.h-ne::before,.h-sw::before,.h-se::before{
+  border:2px solid var(--accent); background:#0d1512;
+}
+.multi-rect .h-nw::before,.multi-rect .h-ne::before,.multi-rect .h-sw::before,.multi-rect .h-se::before{ border-color:#e39ad1; }
+.h-n::before,.h-s::before{ left:2px; right:2px; top:4px; bottom:4px; background:var(--accent); }
+.h-e::before,.h-w::before{ top:2px; bottom:2px; left:4px; right:4px; background:var(--accent); }
+.multi-rect .h-n::before,.multi-rect .h-s::before,.multi-rect .h-e::before,.multi-rect .h-w::before{ background:#e39ad1; }
+
+.ghost-rect{
+  position:absolute; border:1.5px dashed #e39ad1; background:rgba(227,154,209,0.08); pointer-events:none;
+}
+
+/* grid lines */
+.grid-line{ position:absolute; pointer-events:auto; }
+.line-v{ top:0; bottom:0; width:0; }
+.line-h{ left:0; right:0; height:0; }
+.line-v::after{ content:""; position:absolute; top:0; bottom:0; left:-1px; width:2px; background:var(--accent-2); }
+.line-h::after{ content:""; position:absolute; left:0; right:0; top:-1px; height:2px; background:var(--accent-2); }
+.line-handle{ position:absolute; background:var(--accent-2); }
+.line-v .line-handle{ top:50%; left:-6px; width:13px; height:24px; margin-top:-12px; cursor:ew-resize; border-radius:3px; }
+.line-h .line-handle{ left:50%; top:-6px; height:13px; width:24px; margin-left:-12px; cursor:ns-resize; border-radius:3px; }
+.line-v .line-handle::before{ content:"⋮"; }
+.line-h .line-handle::before{ content:"⋯"; }
+.line-handle{ display:flex; align-items:center; justify-content:center; color:#0d1512; font-size:12px; font-weight:700; }
+.line-del{
+  position:absolute; width:15px; height:15px; border-radius:50%; background:var(--danger); color:#2a0f0b;
+  border:1.5px solid var(--bg); font-size:10px; line-height:1; cursor:pointer; padding:0; font-weight:700;
+}
+.line-v .line-del{ top:calc(50% - 12px); left:-14px; }
+.line-h .line-del{ left:calc(50% - 12px); top:-14px; }
+
+.cell-chip{
+  position:absolute; pointer-events:none; font-family:var(--mono); color:var(--text-dim);
+  font-size:10px; padding:2px 5px; background:rgba(13,21,18,0.72); border-radius:2px;
+  top:4px; left:4px; border:1px solid var(--border-soft);
+}
+
+/* ---------- sidebar sections ---------- */
+.side-section{ padding:18px 18px; border-bottom:1px solid var(--border-soft); }
+.side-section h3{
+  font-family:var(--display); font-size:11.5px; letter-spacing:1px; text-transform:uppercase;
+  color:var(--text-faint); margin:0 0 14px; display:flex; align-items:center; gap:8px;
+}
+.side-section h3::after{ content:""; flex:1; height:1px; background:var(--border-soft); }
+.field-row{ display:flex; gap:10px; margin-bottom:10px; }
+.field{ flex:1; }
+.field label{ display:block; font-size:10.5px; color:var(--text-faint); font-family:var(--mono); margin-bottom:5px; text-transform:uppercase; letter-spacing:.5px; }
+.field input[type="number"], .field input[type="text"]{
+  width:100%; background:var(--panel); border:1px solid var(--border); color:var(--text);
+  font-family:var(--mono); font-size:12.5px; padding:7px 8px; border-radius:4px;
+}
+.field input:focus{ outline:none; border-color:var(--accent); }
+.stack-btns{ display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
+.hint-text{ font-size:11.5px; color:var(--text-faint); line-height:1.6; margin:8px 0 0; }
+.divider-mini{ height:1px; background:var(--border-soft); margin:14px 0; }
+
+.multi-list{ display:flex; flex-direction:column; gap:6px; max-height:220px; overflow-y:auto; margin-top:4px; }
+.multi-list-item{
+  display:flex; align-items:center; gap:8px; padding:7px 8px; background:var(--panel); border:1px solid var(--border-soft);
+  border-radius:4px; font-family:var(--mono); font-size:11px;
+}
+.multi-list-item .chip{ width:16px;height:16px;border-radius:2px;background:#e39ad1;color:#241804;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10px; flex:none;}
+.multi-list-item .dims{ color:var(--text-dim); flex:1; }
+.multi-list-item button{ background:none;border:none;color:var(--danger);cursor:pointer;font-size:13px; padding:2px 4px;}
+.empty-note{ color:var(--text-faint); font-size:11.5px; font-family:var(--mono); padding:10px 0; }
+
+/* output panel */
+.output-panel{ padding:18px; flex:1; }
+.output-empty{ color:var(--text-faint); font-size:12px; line-height:1.7; }
+.output-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
+.thumb-card{ background:var(--panel); border:1px solid var(--border-soft); border-radius:5px; overflow:hidden; }
+.thumb-card .thumb-imgwrap{
+  width:100%; aspect-ratio:1/1; display:flex; align-items:center; justify-content:center; background:#0d1512;
+  overflow:hidden;
+}
+.thumb-card canvas{ max-width:100%; max-height:100%; display:block; }
+.thumb-meta{ padding:6px 7px; }
+.thumb-meta .name{ font-family:var(--mono); font-size:10px; color:var(--text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block; }
+.thumb-meta .dl{
+  width:100%; margin-top:5px; background:var(--panel-2); border:1px solid var(--border); color:var(--text);
+  font-size:10.5px; padding:5px; border-radius:3px; cursor:pointer; font-family:var(--sans); font-weight:600;
+}
+.thumb-meta .dl:hover{ filter:brightness(1.2); }
+
+.footer-note{ padding:14px 18px 22px; font-size:10.5px; color:var(--text-faint); font-family:var(--mono); line-height:1.7; }
+
+@media (max-width: 860px){
+  .workspace{ flex-direction:column; }
+  .sidebar{ width:100%; border-left:none; border-top:1px solid var(--border-soft); }
+}
+
+/* ---------- ad slots ---------- */
+.ad-slot{
+  border:1px dashed var(--border);
+  border-radius:5px;
+  background:var(--panel);
+  display:flex; align-items:center; justify-content:center;
+  color:var(--text-faint); font-family:var(--mono); font-size:10px; letter-spacing:.5px; text-transform:uppercase;
+}
+.ad-slot::before{ content: attr(data-label); }
+.ad-top{ width:100%; min-height:60px; }
+.ad-sidebar{ width:100%; min-height:250px; }
+.ad-incontent{ width:100%; min-height:100px; margin:36px 0; }
+
+/* ---------- surrounding content page ---------- */
+.content-page{
+  background:var(--bg-2);
+  border-top:1px solid var(--border-soft);
+}
+.content-wrap{ max-width:920px; margin:0 auto; padding:56px 24px 24px; }
+.content-section{ margin-bottom:52px; }
+.content-section .eyebrow{
+  font-family:var(--mono); font-size:11px; letter-spacing:1.5px; text-transform:uppercase;
+  color:var(--accent-2); margin:0 0 10px;
+}
+.content-section h2{ font-family:var(--display); font-size:24px; margin:0 0 14px; line-height:1.25; }
+.content-section p{ color:var(--text-dim); line-height:1.75; font-size:14px; margin:0 0 14px; max-width:70ch; }
+
+.steps-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:18px; margin-top:24px; }
+.step-card{ background:var(--panel); border:1px solid var(--border-soft); border-radius:7px; padding:20px; }
+.step-card .step-num{ font-family:var(--mono); font-size:11px; color:var(--accent); margin-bottom:10px; }
+.step-card h3{ font-family:var(--display); font-size:15px; margin:0 0 8px; }
+.step-card p{ font-size:12.5px; color:var(--text-dim); line-height:1.65; margin:0; }
+
+.usecase-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-top:22px; }
+.usecase-card{
+  background:var(--panel); border:1px solid var(--border-soft); border-radius:6px; padding:16px;
+  font-size:12.5px; color:var(--text-dim); line-height:1.6;
+}
+.usecase-card strong{ display:block; color:var(--text); font-family:var(--sans); font-size:13px; margin-bottom:5px; }
+
+.faq-item{ border-bottom:1px solid var(--border-soft); padding:16px 0; }
+.faq-item summary{
+  cursor:pointer; font-family:var(--display); font-size:14.5px; color:var(--text);
+  list-style:none; display:flex; align-items:center; justify-content:space-between; gap:12px;
+}
+.faq-item summary::-webkit-details-marker{ display:none; }
+.faq-item summary::after{ content:"+"; color:var(--accent); font-size:18px; font-family:var(--mono); flex:none; }
+.faq-item[open] summary::after{ content:"\2212"; }
+.faq-item p{ margin:10px 0 0; font-size:13px; color:var(--text-dim); line-height:1.7; max-width:70ch; }
+
+.page-footer{
+  border-top:1px solid var(--border-soft); padding:24px; text-align:center;
+  font-family:var(--mono); font-size:11px; color:var(--text-faint);
+}
+
+@media (max-width: 760px){
+  .steps-grid{ grid-template-columns:1fr; }
+  .usecase-grid{ grid-template-columns:1fr 1fr; }
+}
+@media (max-width: 480px){
+  .usecase-grid{ grid-template-columns:1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <div>
+        <h1>Cutmat</h1>
+        <span>crop &middot; slice &middot; export</span>
+      </div>
+    </div>
+
+    <div class="mode-tabs" id="modeTabs">
+      <button class="mode-tab m-crop active" data-mode="crop"><span class="num">01</span> Standard Crop</button>
+      <button class="mode-tab m-grid" data-mode="grid"><span class="num">02</span> Grid Slicing</button>
+      <button class="mode-tab m-multi" data-mode="multi"><span class="num">03</span> Multi-Select</button>
+    </div>
+
+    <div class="topbar-actions">
+      <button class="btn btn-ghost btn-sm" id="btnReplace" style="display:none;">Replace image</button>
+      <label class="btn btn-primary" for="fileInput">Upload image</label>
+      <input type="file" id="fileInput" accept="image/*">
+    </div>
+  </div>
+
+  <!-- AdSense: replace this placeholder with your <ins class="adsbygoogle"> unit -->
+  <div class="ad-slot ad-top" data-label="Advertisement"></div>
+
+  <div class="workspace">
+    <div class="stage-col" id="stageCol">
+      <div class="empty" id="emptyState">
+        <div class="corner c-tl"></div><div class="corner c-tr"></div>
+        <div class="corner c-bl"></div><div class="corner c-br"></div>
+        <h2>Drop an image on the mat</h2>
+        <p>Upload a photo, then crop a single region, slice it into a custom grid, or draw multiple selections — export everything as individual PNGs or one ZIP.</p>
+        <button class="btn btn-primary" id="btnEmptyUpload">Choose an image</button>
+        <div class="hint-text">PNG, JPG, WEBP &middot; processed entirely in your browser</div>
+      </div>
+
+      <div class="stage-shell" id="stageShell">
+        <div class="ruler-wrap">
+          <div class="ruler-corner"></div>
+          <div class="ruler-top" id="rulerTop"></div>
+          <div class="ruler-left" id="rulerLeft"></div>
+          <div class="stage" id="stage">
+            <img id="srcImg" draggable="false" alt="">
+            <div class="overlay" id="overlay"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar" id="sidebar">
+      <div class="side-section" id="panelCrop">
+        <h3>Crop region</h3>
+        <div class="field-row">
+          <div class="field"><label>X</label><input type="number" id="cropX" min="0"></div>
+          <div class="field"><label>Y</label><input type="number" id="cropY" min="0"></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Width</label><input type="number" id="cropW" min="1"></div>
+          <div class="field"><label>Height</label><input type="number" id="cropH" min="1"></div>
+        </div>
+        <div class="stack-btns">
+          <button class="btn btn-sm btn-ghost" id="cropReset">Reset to full image</button>
+        </div>
+        <p class="hint-text">Drag inside the box to move it, or drag any handle to resize. Values update live.</p>
+      </div>
+
+      <div class="side-section" id="panelGrid" style="display:none;">
+        <h3>Grid setup</h3>
+        <div class="field-row">
+          <div class="field"><label>Rows</label><input type="number" id="gridRows" min="1" max="20" value="2"></div>
+          <div class="field"><label>Columns</label><input type="number" id="gridCols" min="1" max="20" value="2"></div>
+        </div>
+        <div class="stack-btns">
+          <button class="btn btn-sm" id="gridApply">Apply even grid</button>
+        </div>
+        <div class="divider-mini"></div>
+        <h3 style="margin-bottom:10px;">Manual cuts</h3>
+        <div class="stack-btns">
+          <button class="btn btn-sm btn-ghost" id="addVLine">+ vertical cut</button>
+          <button class="btn btn-sm btn-ghost" id="addHLine">+ horizontal cut</button>
+        </div>
+        <p class="hint-text">Drag any teal line to make uneven rows or columns. Click the &times; on a line to remove it.</p>
+      </div>
+
+      <div class="side-section" id="panelMulti" style="display:none;">
+        <h3>Selections</h3>
+        <p class="hint-text" style="margin-top:0;">Click and drag anywhere on the image to draw a new selection. Overlap freely.</p>
+        <div class="multi-list" id="multiList">
+          <div class="empty-note">No selections yet — draw one on the image.</div>
+        </div>
+        <div class="stack-btns" style="margin-top:10px;">
+          <button class="btn btn-sm btn-ghost" id="multiClear">Clear all</button>
+        </div>
+      </div>
+
+      <div class="side-section">
+        <h3>Export</h3>
+        <div class="field-row">
+          <div class="field" style="flex:2;"><label>File prefix</label><input type="text" id="namePrefix" value="image"></div>
+        </div>
+        <div class="stack-btns" id="exportButtons">
+          <button class="btn btn-primary btn-sm" id="btnGenerate" style="width:100%;">Generate preview</button>
+        </div>
+      </div>
+
+      <div class="output-panel">
+        <h3 style="font-family:var(--display);font-size:11.5px;letter-spacing:1px;text-transform:uppercase;color:var(--text-faint);margin:0 0 12px;display:flex;align-items:center;gap:8px;">Output<span style="flex:1;height:1px;background:var(--border-soft);"></span></h3>
+        <div id="outputBody">
+          <div class="output-empty">Nothing generated yet. Adjust your selection and click <em>Generate preview</em>.</div>
+        </div>
+      </div>
+
+      <div class="side-section">
+        <!-- AdSense: replace this placeholder with your <ins class="adsbygoogle"> unit -->
+        <div class="ad-slot ad-sidebar" data-label="Advertisement"></div>
+      </div>
+
+      <div class="footer-note">All processing happens locally in your browser.<br>Nothing is uploaded anywhere.</div>
+    </div>
+  </div>
+</div>
+
+<div class="content-page">
+  <div class="content-wrap">
+
+    <section class="content-section">
+      <p class="eyebrow">About Cutmat</p>
+      <h2>A cutting mat for your images, right in the browser</h2>
+      <p>Cutmat is a free tool for dividing an image into smaller pieces without installing anything. Upload a photo and choose how you want to cut it: pull out one exact region, slice the whole thing into a grid of rows and columns, or drop several independent selections anywhere on the frame. Every crop happens on your own device using the HTML canvas API — nothing is ever sent to a server, so there's no upload wait and no privacy concern with sensitive images.</p>
+      <p>It's built for the fiddly, repetitive cropping jobs that a single-selection editor makes tedious: cutting a sprite sheet into individual frames, splitting a scanned contact sheet into separate photos, or breaking a wide banner into a nine-image Instagram grid.</p>
+    </section>
+
+    <section class="content-section">
+      <p class="eyebrow">How it works</p>
+      <h2>Three ways to cut, one export flow</h2>
+      <div class="steps-grid">
+        <div class="step-card">
+          <div class="step-num">01 — Standard Crop</div>
+          <h3>Pull one region out</h3>
+          <p>Drag the corner or edge handles to select any rectangle, or type exact X, Y, width, and height values. Good for a single, precise crop.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-num">02 — Grid Slicing</div>
+          <h3>Cut evenly, then adjust</h3>
+          <p>Set a number of rows and columns for an even grid, then drag any individual line to resize a row or column by hand. Add or remove cuts as needed.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-num">03 — Multi-Select</div>
+          <h3>Draw as many boxes as you like</h3>
+          <p>Click and drag anywhere on the image to add a selection. Selections can overlap, and each one moves, resizes, and deletes independently.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="content-section">
+      <p class="eyebrow">Common uses</p>
+      <h2>Who ends up needing something like this</h2>
+      <div class="usecase-grid">
+        <div class="usecase-card"><strong>Sprite sheets</strong>Slice a character sheet into evenly sized individual frames for a game engine.</div>
+        <div class="usecase-card"><strong>Contact sheets</strong>Split a scanned sheet of photo negatives or prints into separate images.</div>
+        <div class="usecase-card"><strong>Social grids</strong>Cut a wide panorama into a clean 3×3 grid for a nine-photo carousel post.</div>
+        <div class="usecase-card"><strong>Product photography</strong>Pull several product crops out of one studio shot without re-photographing each item.</div>
+      </div>
+    </section>
+
+    <!-- AdSense: replace this placeholder with your <ins class="adsbygoogle"> unit -->
+    <div class="ad-slot ad-incontent" data-label="Advertisement"></div>
+
+    <section class="content-section">
+      <p class="eyebrow">FAQ</p>
+      <h2>Good to know</h2>
+
+      <details class="faq-item">
+        <summary>Does my image get uploaded anywhere?</summary>
+        <p>No. Cropping and slicing happen locally in your browser using the canvas API. The image data never leaves your device.</p>
+      </details>
+      <details class="faq-item">
+        <summary>What file types are supported?</summary>
+        <p>Any image format your browser can decode, which typically includes JPG, PNG, and WEBP. Exports are always PNG.</p>
+      </details>
+      <details class="faq-item">
+        <summary>Is there a size or resolution limit?</summary>
+        <p>Exports are generated at the original image's full resolution, so a very large source image can take a moment longer to process and zip. There's no hard-coded limit, but performance depends on your device.</p>
+      </details>
+      <details class="faq-item">
+        <summary>Can I get uneven rows or columns in Grid Slicing mode?</summary>
+        <p>Yes. Start from an even grid, then drag any individual dividing line to resize that row or column. Each line moves independently.</p>
+      </details>
+      <details class="faq-item">
+        <summary>Does this work offline?</summary>
+        <p>The core cropping tool works without a network connection once the page is loaded, but the page fetches fonts and the ZIP-export library from a CDN on first load, so you'll need internet access at least once.</p>
+      </details>
+    </section>
+
+  </div>
+  <div class="page-footer">Cutmat — crop, slice, export. Runs entirely in your browser.</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  // ---------------- state ----------------
+  const state = {
+    img: null,
+    natural: { w: 0, h: 0 },
+    mode: 'crop',
+    crop: { x:0, y:0, w:1, h:1 },
+    grid: { vFracs: [0.5], hFracs: [0.5] },
+    multi: { items: [], nextId: 1 },
+    output: { items: [] } // [{name, canvas}]
+  };
+
+  // ---------------- dom refs ----------------
+  const fileInput = document.getElementById('fileInput');
+  const btnEmptyUpload = document.getElementById('btnEmptyUpload');
+  const btnReplace = document.getElementById('btnReplace');
+  const emptyState = document.getElementById('emptyState');
+  const stageShell = document.getElementById('stageShell');
+  const stageEl = document.getElementById('stage');
+  const imgEl = document.getElementById('srcImg');
+  const overlayEl = document.getElementById('overlay');
+  const rulerTop = document.getElementById('rulerTop');
+  const rulerLeft = document.getElementById('rulerLeft');
+  const modeTabs = document.getElementById('modeTabs');
+  const panelCrop = document.getElementById('panelCrop');
+  const panelGrid = document.getElementById('panelGrid');
+  const panelMulti = document.getElementById('panelMulti');
+  const namePrefixInput = document.getElementById('namePrefix');
+  const outputBody = document.getElementById('outputBody');
+  const btnGenerate = document.getElementById('btnGenerate');
+  const exportButtons = document.getElementById('exportButtons');
+
+  const cropXEl = document.getElementById('cropX');
+  const cropYEl = document.getElementById('cropY');
+  const cropWEl = document.getElementById('cropW');
+  const cropHEl = document.getElementById('cropH');
+
+  const gridRowsEl = document.getElementById('gridRows');
+  const gridColsEl = document.getElementById('gridCols');
+  const multiListEl = document.getElementById('multiList');
+
+  // ---------------- helpers ----------------
+  function clamp(v, lo, hi){ return Math.min(hi, Math.max(lo, v)); }
+  function round(v){ return Math.round(v); }
+  function pad(n, width){ return String(n).padStart(width, '0'); }
+
+  function loadImageFile(file){
+    if(!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => onImageReady(img);
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function onImageReady(img){
+    state.img = img;
+    state.natural.w = img.naturalWidth;
+    state.natural.h = img.naturalHeight;
+    imgEl.src = img.src;
+    stageEl.style.aspectRatio = `${img.naturalWidth} / ${img.naturalHeight}`;
+
+    emptyState.style.display = 'none';
+    stageShell.classList.add('active');
+    btnReplace.style.display = 'inline-flex';
+
+    // reset per-mode state
+    const w = state.natural.w, h = state.natural.h;
+    state.crop = { x: round(w*0.1), y: round(h*0.1), w: round(w*0.8), h: round(h*0.8) };
+    state.grid = { vFracs: [0.5], hFracs: [0.5] };
+    gridRowsEl.value = 2; gridColsEl.value = 2;
+    state.multi = { items: [], nextId: 1 };
+    state.output = { items: [] };
+
+    buildRulers();
+    renderOutputEmpty();
+    renderModePanel();
+  }
+
+  function buildRulers(){
+    rulerTop.innerHTML = '';
+    rulerLeft.innerHTML = '';
+    const steps = 10;
+    for(let i=0;i<=steps;i++){
+      const frac = i/steps;
+      const t = document.createElement('div');
+      t.className = 'tick';
+      t.style.left = (frac*100)+'%';
+      t.textContent = round(frac*state.natural.w);
+      rulerTop.appendChild(t);
+      const l = document.createElement('div');
+      l.className = 'tick';
+      l.style.top = (frac*100)+'%';
+      l.textContent = round(frac*state.natural.h);
+      rulerLeft.appendChild(l);
+    }
+  }
+
+  function cropCanvasFromRect(rect){
+    const w = Math.max(1, round(rect.w));
+    const h = Math.max(1, round(rect.h));
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(state.img, rect.x, rect.y, rect.w, rect.h, 0, 0, w, h);
+    return c;
+  }
+
+  function canvasToBlob(canvas){
+    return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+  }
+
+  function triggerDownload(blob, filename){
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
+
+  function prefix(){
+    const v = namePrefixInput.value.trim();
+    return v ? v.replace(/[^a-z0-9_\-]+/gi, '_') : 'image';
+  }
+
+  // ---------------- generic interactive rectangle ----------------
+  function makeRectEl(rect, opts){
+    opts = opts || {};
+    const el = document.createElement('div');
+    el.className = 'rect' + (opts.className ? ' ' + opts.className : '');
+
+    const body = document.createElement('div');
+    body.className = 'rect-body';
+    el.appendChild(body);
+
+    const dims = document.createElement('div');
+    dims.className = 'rect-dims';
+    el.appendChild(dims);
+
+    if(opts.label !== undefined){
+      const lab = document.createElement('div');
+      lab.className = 'rect-label';
+      lab.textContent = opts.label;
+      el.appendChild(lab);
+    }
+
+    if(opts.onDelete){
+      const del = document.createElement('button');
+      del.className = 'rect-del';
+      del.type = 'button';
+      del.textContent = '\u00d7';
+      del.addEventListener('mousedown', (e) => e.stopPropagation());
+      del.addEventListener('click', (e) => { e.stopPropagation(); opts.onDelete(); });
+      el.appendChild(del);
+    }
+
+    ['nw','n','ne','e','se','s','sw','w'].forEach((dir) => {
+      const hd = document.createElement('div');
+      hd.className = 'handle h-' + dir;
+      hd.dataset.dir = dir;
+      el.appendChild(hd);
+    });
+
+    function render(){
+      const bw = state.natural.w, bh = state.natural.h;
+      el.style.left = (rect.x/bw*100) + '%';
+      el.style.top = (rect.y/bh*100) + '%';
+      el.style.width = (rect.w/bw*100) + '%';
+      el.style.height = (rect.h/bh*100) + '%';
+      dims.textContent = round(rect.w) + '\u00d7' + round(rect.h);
+    }
+    render();
+
+    function stageScale(){
+      const r = stageEl.getBoundingClientRect();
+      return { sx: r.width/state.natural.w, sy: r.height/state.natural.h };
+    }
+
+    const minSize = 8;
+
+    body.addEventListener('mousedown', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const startX = e.clientX, startY = e.clientY;
+      const orig = { x: rect.x, y: rect.y, w: rect.w, h: rect.h };
+      const { sx, sy } = stageScale();
+      function move(ev){
+        const dx = (ev.clientX-startX)/sx;
+        const dy = (ev.clientY-startY)/sy;
+        rect.x = clamp(orig.x+dx, 0, state.natural.w-rect.w);
+        rect.y = clamp(orig.y+dy, 0, state.natural.h-rect.h);
+        render();
+        if(opts.onChange) opts.onChange();
+      }
+      function up(){
+        document.removeEventListener('mousemove', move);
+        document.removeEventListener('mouseup', up);
+        if(opts.onCommit) opts.onCommit();
+      }
+      document.addEventListener('mousemove', move);
+      document.addEventListener('mouseup', up);
+    });
+
+    el.querySelectorAll('.handle').forEach((hd) => {
+      hd.addEventListener('mousedown', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const dir = hd.dataset.dir;
+        const startX = e.clientX, startY = e.clientY;
+        const orig = { x: rect.x, y: rect.y, w: rect.w, h: rect.h };
+        const { sx, sy } = stageScale();
+        function move(ev){
+          const dx = (ev.clientX-startX)/sx;
+          const dy = (ev.clientY-startY)/sy;
+          let { x, y, w, h } = orig;
+          if(dir.includes('e')) w = clamp(orig.w+dx, minSize, state.natural.w-orig.x);
+          if(dir.includes('s')) h = clamp(orig.h+dy, minSize, state.natural.h-orig.y);
+          if(dir.includes('w')){
+            const newX = clamp(orig.x+dx, 0, orig.x+orig.w-minSize);
+            w = orig.w + (orig.x-newX);
+            x = newX;
+          }
+          if(dir.includes('n')){
+            const newY = clamp(orig.y+dy, 0, orig.y+orig.h-minSize);
+            h = orig.h + (orig.y-newY);
+            y = newY;
+          }
+          rect.x = x; rect.y = y; rect.w = w; rect.h = h;
+          render();
+          if(opts.onChange) opts.onChange();
+        }
+        function up(){
+          document.removeEventListener('mousemove', move);
+          document.removeEventListener('mouseup', up);
+          if(opts.onCommit) opts.onCommit();
+        }
+        document.addEventListener('mousemove', move);
+        document.addEventListener('mouseup', up);
+      });
+    });
+
+    el._render = render;
+    return el;
+  }
+
+  // ---------------- CROP MODE ----------------
+  function syncCropInputs(){
+    cropXEl.value = round(state.crop.x);
+    cropYEl.value = round(state.crop.y);
+    cropWEl.value = round(state.crop.w);
+    cropHEl.value = round(state.crop.h);
+  }
+
+  function renderCropOverlay(){
+    overlayEl.innerHTML = '';
+    const el = makeRectEl(state.crop, {
+      onChange: syncCropInputs,
+      onCommit: () => generateCropPreview()
+    });
+    overlayEl.appendChild(el);
+    syncCropInputs();
+  }
+
+  [cropXEl, cropYEl, cropWEl, cropHEl].forEach((inp) => {
+    inp.addEventListener('change', () => {
+      const w = state.natural.w, h = state.natural.h;
+      let x = clamp(parseFloat(cropXEl.value)||0, 0, w-1);
+      let y = clamp(parseFloat(cropYEl.value)||0, 0, h-1);
+      let cw = clamp(parseFloat(cropWEl.value)||1, 1, w-x);
+      let ch = clamp(parseFloat(cropHEl.value)||1, 1, h-y);
+      state.crop = { x, y, w: cw, h: ch };
+      renderCropOverlay();
+      generateCropPreview();
+    });
+  });
+
+  document.getElementById('cropReset').addEventListener('click', () => {
+    state.crop = { x:0, y:0, w: state.natural.w, h: state.natural.h };
+    renderCropOverlay();
+    generateCropPreview();
+  });
+
+  function generateCropPreview(){
+    if(!state.img) return;
+    const canvas = cropCanvasFromRect(state.crop);
+    state.output.items = [{ name: prefix() + '.png', canvas }];
+    renderOutputThumbs();
+  }
+
+  // ---------------- GRID MODE ----------------
+  function setEvenFracs(count){
+    const arr = [];
+    for(let i=1;i<count;i++) arr.push(i/count);
+    return arr;
+  }
+
+  document.getElementById('gridApply').addEventListener('click', () => {
+    const rows = clamp(parseInt(gridRowsEl.value)||1, 1, 20);
+    const cols = clamp(parseInt(gridColsEl.value)||1, 1, 20);
+    gridRowsEl.value = rows; gridColsEl.value = cols;
+    state.grid.hFracs = setEvenFracs(rows);
+    state.grid.vFracs = setEvenFracs(cols);
+    renderGridOverlay();
+    generateGridPreview();
+  });
+
+  function addCut(arr){
+    const bounds = [0, ...arr.slice().sort((a,b)=>a-b), 1];
+    let bestGap = -1, bestMid = 0.5;
+    for(let i=0;i<bounds.length-1;i++){
+      const gap = bounds[i+1]-bounds[i];
+      if(gap > bestGap){ bestGap = gap; bestMid = (bounds[i]+bounds[i+1])/2; }
+    }
+    arr.push(bestMid);
+    arr.sort((a,b)=>a-b);
+  }
+
+  document.getElementById('addVLine').addEventListener('click', () => {
+    addCut(state.grid.vFracs);
+    gridColsEl.value = state.grid.vFracs.length+1;
+    renderGridOverlay();
+    generateGridPreview();
+  });
+  document.getElementById('addHLine').addEventListener('click', () => {
+    addCut(state.grid.hFracs);
+    gridRowsEl.value = state.grid.hFracs.length+1;
+    renderGridOverlay();
+    generateGridPreview();
+  });
+
+  function renderGridOverlay(){
+    overlayEl.innerHTML = '';
+    const vArr = state.grid.vFracs, hArr = state.grid.hFracs;
+
+    function buildLine(orientation, arr, index){
+      const el = document.createElement('div');
+      el.className = 'grid-line line-' + orientation;
+      const handle = document.createElement('div');
+      handle.className = 'line-handle';
+      el.appendChild(handle);
+      const del = document.createElement('button');
+      del.className = 'line-del';
+      del.type = 'button';
+      del.textContent = '\u00d7';
+      del.addEventListener('mousedown', (e) => e.stopPropagation());
+      del.addEventListener('click', (e) => {
+        e.stopPropagation();
+        arr.splice(index, 1);
+        if(orientation==='v') gridColsEl.value = vArr.length+1; else gridRowsEl.value = hArr.length+1;
+        renderGridOverlay();
+        generateGridPreview();
+      });
+      el.appendChild(del);
+
+      function place(){
+        const f = arr[index];
+        if(orientation==='v') el.style.left = (f*100)+'%';
+        else el.style.top = (f*100)+'%';
+      }
+      place();
+
+      el.addEventListener('mousedown', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const rect = stageEl.getBoundingClientRect();
+        function move(ev){
+          let f;
+          if(orientation==='v') f = (ev.clientX-rect.left)/rect.width;
+          else f = (ev.clientY-rect.top)/rect.height;
+          const sorted = arr.slice().sort((a,b)=>a-b);
+          const myVal = arr[index];
+          const pos = sorted.indexOf(myVal);
+          const lo = pos>0 ? sorted[pos-1]+0.01 : 0.01;
+          const hi = pos<sorted.length-1 ? sorted[pos+1]-0.01 : 0.99;
+          arr[index] = clamp(f, lo, hi);
+          place();
+          updateCellChips();
+        }
+        function up(){
+          document.removeEventListener('mousemove', move);
+          document.removeEventListener('mouseup', up);
+          generateGridPreview();
+        }
+        document.addEventListener('mousemove', move);
+        document.addEventListener('mouseup', up);
+      });
+
+      return el;
+    }
+
+    vArr.forEach((_, i) => overlayEl.appendChild(buildLine('v', vArr, i)));
+    hArr.forEach((_, i) => overlayEl.appendChild(buildLine('h', hArr, i)));
+
+    buildCellChips();
+  }
+
+  let cellChipEls = [];
+  function gridBoundsPx(){
+    const xs = [0, ...state.grid.vFracs.slice().sort((a,b)=>a-b), 1].map(f => f*state.natural.w);
+    const ys = [0, ...state.grid.hFracs.slice().sort((a,b)=>a-b), 1].map(f => f*state.natural.h);
+    return { xs, ys };
+  }
+  function buildCellChips(){
+    cellChipEls.forEach(el => el.remove());
+    cellChipEls = [];
+    const { xs, ys } = gridBoundsPx();
+    let n = 1;
+    for(let r=0;r<ys.length-1;r++){
+      for(let c=0;c<xs.length-1;c++){
+        const chip = document.createElement('div');
+        chip.className = 'cell-chip';
+        chip.style.left = (xs[c]/state.natural.w*100)+'%';
+        chip.style.top = (ys[r]/state.natural.h*100)+'%';
+        chip.textContent = n + ' \u00b7 ' + round(xs[c+1]-xs[c]) + '\u00d7' + round(ys[r+1]-ys[r]);
+        overlayEl.appendChild(chip);
+        cellChipEls.push(chip);
+        n++;
+      }
+    }
+  }
+  function updateCellChips(){ buildCellChips(); }
+
+  function generateGridPreview(){
+    if(!state.img) return;
+    const { xs, ys } = gridBoundsPx();
+    const total = (xs.length-1)*(ys.length-1);
+    const width = String(total).length;
+    const items = [];
+    let n = 1;
+    for(let r=0;r<ys.length-1;r++){
+      for(let c=0;c<xs.length-1;c++){
+        const rect = { x: xs[c], y: ys[r], w: xs[c+1]-xs[c], h: ys[r+1]-ys[r] };
+        const canvas = cropCanvasFromRect(rect);
+        items.push({ name: `${prefix()}_${pad(n, Math.max(2,width))}.png`, canvas });
+        n++;
+      }
+    }
+    state.output.items = items;
+    renderOutputThumbs();
+  }
+
+  // ---------------- MULTI-SELECT MODE ----------------
+  function renderMultiOverlay(){
+    overlayEl.innerHTML = '';
+    state.multi.items.forEach((item, idx) => {
+      const el = makeRectEl(item, {
+        className: 'multi-rect',
+        label: idx+1,
+        onChange: () => {},
+        onCommit: () => generateMultiPreview(),
+        onDelete: () => {
+          state.multi.items = state.multi.items.filter(i => i.id !== item.id);
+          renderMultiOverlay();
+          renderMultiList();
+          generateMultiPreview();
+        }
+      });
+      overlayEl.appendChild(el);
+    });
+    renderMultiList();
+  }
+
+  function renderMultiList(){
+    multiListEl.innerHTML = '';
+    if(state.multi.items.length === 0){
+      multiListEl.innerHTML = '<div class="empty-note">No selections yet — draw one on the image.</div>';
+      return;
+    }
+    state.multi.items.forEach((item, idx) => {
+      const row = document.createElement('div');
+      row.className = 'multi-list-item';
+      row.innerHTML = `<span class="chip">${idx+1}</span><span class="dims">${round(item.w)}\u00d7${round(item.h)} @ ${round(item.x)},${round(item.y)}</span>`;
+      const del = document.createElement('button');
+      del.textContent = '\u00d7';
+      del.addEventListener('click', () => {
+        state.multi.items = state.multi.items.filter(i => i.id !== item.id);
+        renderMultiOverlay();
+        generateMultiPreview();
+      });
+      row.appendChild(del);
+      multiListEl.appendChild(row);
+    });
+  }
+
+  document.getElementById('multiClear').addEventListener('click', () => {
+    state.multi.items = [];
+    renderMultiOverlay();
+    generateMultiPreview();
+  });
+
+  let creatingSelection = false;
+  stageEl.addEventListener('mousedown', (e) => {
+    if(state.mode !== 'multi') return;
+    if(e.target !== imgEl && e.target !== stageEl) return;
+    e.preventDefault();
+    creatingSelection = true;
+    const rectBounds = stageEl.getBoundingClientRect();
+    const startNX = clamp((e.clientX-rectBounds.left)/rectBounds.width*state.natural.w, 0, state.natural.w);
+    const startNY = clamp((e.clientY-rectBounds.top)/rectBounds.height*state.natural.h, 0, state.natural.h);
+    const ghost = { x: startNX, y: startNY, w: 0, h: 0 };
+    const ghostEl = document.createElement('div');
+    ghostEl.className = 'ghost-rect';
+    overlayEl.appendChild(ghostEl);
+
+    function place(){
+      ghostEl.style.left = (ghost.x/state.natural.w*100)+'%';
+      ghostEl.style.top = (ghost.y/state.natural.h*100)+'%';
+      ghostEl.style.width = (ghost.w/state.natural.w*100)+'%';
+      ghostEl.style.height = (ghost.h/state.natural.h*100)+'%';
+    }
+
+    function move(ev){
+      const nx = clamp((ev.clientX-rectBounds.left)/rectBounds.width*state.natural.w, 0, state.natural.w);
+      const ny = clamp((ev.clientY-rectBounds.top)/rectBounds.height*state.natural.h, 0, state.natural.h);
+      ghost.x = Math.min(startNX, nx);
+      ghost.y = Math.min(startNY, ny);
+      ghost.w = Math.abs(nx-startNX);
+      ghost.h = Math.abs(ny-startNY);
+      place();
+    }
+    function up(){
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', up);
+      ghostEl.remove();
+      creatingSelection = false;
+      if(ghost.w > 6 && ghost.h > 6){
+        state.multi.items.push({ id: state.multi.nextId++, x: ghost.x, y: ghost.y, w: ghost.w, h: ghost.h });
+        renderMultiOverlay();
+        generateMultiPreview();
+      }
+    }
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
+  });
+
+  function generateMultiPreview(){
+    if(!state.img) return;
+    const total = state.multi.items.length;
+    const width = String(Math.max(total,1)).length;
+    const items = state.multi.items.map((item, idx) => ({
+      name: `${prefix()}_${pad(idx+1, Math.max(2,width))}.png`,
+      canvas: cropCanvasFromRect(item)
+    }));
+    state.output.items = items;
+    renderOutputThumbs();
+  }
+
+  // ---------------- output panel ----------------
+  function renderOutputEmpty(){
+    outputBody.innerHTML = '<div class="output-empty">Nothing generated yet. Adjust your selection and click <em>Generate preview</em>.</div>';
+  }
+
+  function renderOutputThumbs(){
+    outputBody.innerHTML = '';
+    const items = state.output.items;
+    if(!items || items.length === 0){ renderOutputEmpty(); return; }
+
+    const grid = document.createElement('div');
+    grid.className = 'output-grid';
+    items.forEach((item) => {
+      const card = document.createElement('div');
+      card.className = 'thumb-card';
+      const wrap = document.createElement('div');
+      wrap.className = 'thumb-imgwrap';
+      wrap.appendChild(item.canvas);
+      card.appendChild(wrap);
+      const meta = document.createElement('div');
+      meta.className = 'thumb-meta';
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = item.name;
+      meta.appendChild(name);
+      const dl = document.createElement('button');
+      dl.className = 'dl';
+      dl.textContent = 'Download PNG';
+      dl.addEventListener('click', async () => {
+        const blob = await canvasToBlob(item.canvas);
+        triggerDownload(blob, item.name);
+      });
+      meta.appendChild(dl);
+      card.appendChild(meta);
+      grid.appendChild(card);
+    });
+    outputBody.appendChild(grid);
+
+    const actions = document.createElement('div');
+    actions.className = 'stack-btns';
+    const countLabel = document.createElement('div');
+    countLabel.className = 'hint-text';
+    countLabel.style.width = '100%';
+    countLabel.textContent = items.length + (items.length===1 ? ' image ready' : ' images ready');
+    outputBody.appendChild(countLabel);
+
+    if(items.length > 1){
+      const zipBtn = document.createElement('button');
+      zipBtn.className = 'btn btn-primary btn-sm';
+      zipBtn.style.width = '100%';
+      zipBtn.textContent = 'Download all as ZIP';
+      zipBtn.addEventListener('click', () => downloadZip(items));
+      actions.appendChild(zipBtn);
+      outputBody.appendChild(actions);
+    }
+  }
+
+  async function downloadZip(items){
+    const zip = new JSZip();
+    for(const item of items){
+      const blob = await canvasToBlob(item.canvas);
+      zip.file(item.name, blob);
+    }
+    const blob = await zip.generateAsync({ type: 'blob' });
+    triggerDownload(blob, prefix() + '.zip');
+  }
+
+  // ---------------- mode switching ----------------
+  function renderModePanel(){
+    panelCrop.style.display = state.mode === 'crop' ? '' : 'none';
+    panelGrid.style.display = state.mode === 'grid' ? '' : 'none';
+    panelMulti.style.display = state.mode === 'multi' ? '' : 'none';
+
+    if(!state.img) return;
+    if(state.mode === 'crop'){ renderCropOverlay(); generateCropPreview(); }
+    else if(state.mode === 'grid'){ renderGridOverlay(); generateGridPreview(); }
+    else if(state.mode === 'multi'){ renderMultiOverlay(); generateMultiPreview(); }
+  }
+
+  modeTabs.querySelectorAll('.mode-tab').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      modeTabs.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      state.mode = tab.dataset.mode;
+      renderModePanel();
+    });
+  });
+
+  btnGenerate.addEventListener('click', () => {
+    if(state.mode === 'crop') generateCropPreview();
+    else if(state.mode === 'grid') generateGridPreview();
+    else generateMultiPreview();
+  });
+
+  namePrefixInput.addEventListener('input', () => {
+    if(!state.img) return;
+    if(state.mode === 'crop') generateCropPreview();
+    else if(state.mode === 'grid') generateGridPreview();
+    else generateMultiPreview();
+  });
+
+  // ---------------- upload wiring ----------------
+  fileInput.addEventListener('change', (e) => loadImageFile(e.target.files[0]));
+  btnEmptyUpload.addEventListener('click', () => fileInput.click());
+  btnReplace.addEventListener('click', () => fileInput.click());
+
+  ['dragover','dragenter'].forEach(evt => {
+    document.body.addEventListener(evt, (e) => {
+      e.preventDefault();
+      if(!state.img) emptyState.classList.add('drag-over');
+    });
+  });
+  ['dragleave','drop'].forEach(evt => {
+    document.body.addEventListener(evt, (e) => {
+      e.preventDefault();
+      emptyState.classList.remove('drag-over');
+    });
+  });
+  document.body.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files && e.dataTransfer.files[0];
+    if(file) loadImageFile(file);
+  });
+
+  window.addEventListener('resize', () => {
+    if(!state.img) return;
+    // re-render current mode overlay so % positioning stays accurate (cheap, no state loss)
+    renderModePanel();
+  });
+
+})();
+</script>
+</body>
+</html>
